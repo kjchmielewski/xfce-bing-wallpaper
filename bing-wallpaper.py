@@ -18,7 +18,6 @@ def main() -> None:
     # Load configuration from environment variable
     country = os.environ.get('BING_WALLPAPER_COUNTRY', '')
     wallpapers_dir = os.environ.get('BING_WALLPAPER_PATH', os.path.expanduser('~/.wallpapers'))
-
     # check store directory
     os.makedirs(wallpapers_dir, exist_ok=True)
 
@@ -29,22 +28,50 @@ def main() -> None:
     # download new wallpapers
     for item in feed:
         path = os.path.join(wallpapers_dir, f'{item["date"]}.jpg')
-        if os.path.exists(path):
-            continue
-        with urlopen(Request(item['imageUrl'], headers=DEFAULT_HEADERS)) as resp:
-            data = resp.read()
-        with open(path, 'wb') as f:
-            f.write(data)
+        if not os.path.exists(path):
+            with urlopen(Request(item['imageUrl'], headers=DEFAULT_HEADERS)) as resp:
+                with open(path, 'wb') as f:
+                    f.write(resp.read())
+
+    # check xfce4-desktop wallpaper configuration mode
+    proc = subprocess.run(['xfconf-query', '-c', 'xfce4-desktop', '-p', '/backdrop/single-workspace-mode'], 
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        print('xfconf-query failed')
+        return
+
+    single_workspace_mode = bool(proc.stdout.strip())
+    print(f'Running in {"single" if single_workspace_mode else "multi"} workspace mode')
+    workspace_num_cmd = ['xfconf-query', '-c', 'xfce4-desktop', '-p', '/backdrop/single-workspace-number'] \
+        if single_workspace_mode \
+        else ['xfconf-query', '-c', 'xfwm4', '-p', '/general/workspace_count']
+    proc = subprocess.run(workspace_num_cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print('xfconf-query failed')
+        return
+    workspace_num = int(proc.stdout.strip())
 
     # update xfce4-desktop wallpaper configuration
     today_wallpaper = os.path.join(wallpapers_dir, f'{date.today().isoformat()}.jpg')
     if not os.path.exists(today_wallpaper):
         return
-    proc = subprocess.run(['xrandr | grep " connected"'], capture_output=True, shell=True, text=True)
+
+    proc = subprocess.run(['xrandr | grep " connected"'], 
+                          capture_output=True, shell=True, text=True)
+    if proc.returncode != 0:
+        print('xrandr failed')
+        return
     monitors = [line.split()[0] for line in proc.stdout.split('\n') if line]
+    
     for monitor in monitors:
-        prop_name = f'/backdrop/screen0/monitor{monitor}/workspace0/last-image'
-        subprocess.run(['xfconf-query', '-c', 'xfce4-desktop', '-p', prop_name, '-s', today_wallpaper])
+        workspaces = range(workspace_num) if not single_workspace_mode else [workspace_num]
+        for workspace_n in workspaces:
+            print(f'Setting wallpaper for monitor {monitor} workspace {workspace_n}')
+            prop_name = f'/backdrop/screen0/monitor{monitor}/workspace{workspace_n}/last-image'
+            proc = subprocess.run(['xfconf-query', '-c', 'xfce4-desktop', '-n', '-t', 'string', 
+                                   '-p', prop_name, '-s', today_wallpaper])
+            if proc.returncode != 0:
+                print(f'xfconf-query failed for monitor {monitor} workspace {workspace_n}')
 
 
 if __name__ == '__main__':
