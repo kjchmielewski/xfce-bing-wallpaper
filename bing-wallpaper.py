@@ -34,20 +34,26 @@ def main() -> None:
                     f.write(resp.read())
 
     # check xfce4-desktop wallpaper configuration mode
-    proc = subprocess.run(['xfconf-query', '-c', 'xfce4-desktop', '-p', '/backdrop/single-workspace-mode'], 
+    proc = subprocess.run(['xfconf-query', '-c', 'xfce4-desktop', '-p', '/backdrop/single-workspace-mode'],
                           capture_output=True, text=True)
     if proc.returncode != 0:
-        print('xfconf-query failed')
-        return
+        print('xfconf-query failed for single-workspace-mode, fallback to multi-workspace mode')
+        proc = subprocess.run(['xfconf-query', '-c', 'xfce4-desktop', '-n', '-t', 'bool',
+                               '-p', '/backdrop/single-workspace-mode', '-s', 'false'])
+        if proc.returncode != 0:
+            print('xfconf-query failed to set single-workspace-mode')
+            return
+        single_workspace_mode = False
+    else:
+        single_workspace_mode = proc.stdout.strip() == 'true'
 
-    single_workspace_mode = bool(proc.stdout.strip())
     print(f'Running in {"single" if single_workspace_mode else "multi"} workspace mode')
     workspace_num_cmd = ['xfconf-query', '-c', 'xfce4-desktop', '-p', '/backdrop/single-workspace-number'] \
         if single_workspace_mode \
         else ['xfconf-query', '-c', 'xfwm4', '-p', '/general/workspace_count']
     proc = subprocess.run(workspace_num_cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        print('xfconf-query failed')
+        print('xfconf-query failed to get workspace number')
         return
     workspace_num = int(proc.stdout.strip())
 
@@ -59,7 +65,7 @@ def main() -> None:
     proc = subprocess.run(['xrandr | grep " connected"'], 
                           capture_output=True, shell=True, text=True)
     if proc.returncode != 0:
-        print('xrandr failed')
+        print('xrandr failed to get connected monitors')
         return
     monitors = [line.split()[0] for line in proc.stdout.split('\n') if line]
     
