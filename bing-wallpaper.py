@@ -56,6 +56,7 @@ def main() -> None:
         print('xfconf-query failed to get workspace number')
         return
     workspace_num = int(proc.stdout.strip())
+    workspaces = range(workspace_num) if not single_workspace_mode else [workspace_num]
 
     # update xfce4-desktop wallpaper configuration
     today_wallpaper = os.path.join(wallpapers_dir, f'{date.today().isoformat()}.jpg')
@@ -70,7 +71,6 @@ def main() -> None:
     monitors = [line.split()[0] for line in proc.stdout.split('\n') if line]
     
     for monitor in monitors:
-        workspaces = range(workspace_num) if not single_workspace_mode else [workspace_num]
         for workspace_n in workspaces:
             print(f'Setting wallpaper for monitor {monitor} workspace {workspace_n}')
             prop_name = f'/backdrop/screen0/monitor{monitor}/workspace{workspace_n}/last-image'
